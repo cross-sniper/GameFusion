@@ -7,6 +7,16 @@ from lupa import LuaRuntime, LuaError, lua_type
 assets: dict
 
 
+def fill_rect(x: int, y: int, w: int, h: int, color: zcore.draw.ColorType):
+    """Draw a rectangle on the game window."""
+    zcore.draw.fillRect(GameWindow, x, y, w, h, color)
+
+
+def fill_circ(x: int, y: int, r: int, color: zcore.draw.ColorType):
+    """Draw a circle on the game window."""
+    zcore.draw.fillCircle(GameWindow, color, (x, y), r)
+
+
 def draw_rect(x: int, y: int, w: int, h: int, color: zcore.draw.ColorType):
     """Draw a rectangle on the game window."""
     zcore.draw.drawRect(GameWindow, x, y, w, h, color)
@@ -17,11 +27,16 @@ def draw_circ(x: int, y: int, r: int, color: zcore.draw.ColorType):
     zcore.draw.drawCircle(GameWindow, color, (x, y), r)
 
 
-def draw_sprite(name: str, x: int, y: int):
+def draw_sprite(name: str, x: int, y: int, scaleX: int, scaleY: int):
     sprite: zcore.obj.SpriteObject = assets.get(name)
     if not sprite:
         simplexml.panic("you dont have a sprite named", name)
-    sprite.draw(GameWindow, x, y)
+    sprite.draw(GameWindow, x, y, scaleX, scaleY)
+
+
+# def drawText(window: pygame.Surface,text: str, x: int, y: int, size: int, color: ColorType) -> None
+def draw_text(text: str, x: int, y: int, fontSize: int, color: zcore.draw.ColorType):
+    zcore.draw.drawText(GameWindow, text, x, y, fontSize, color)
 
 
 # Initialize Lua Runtime
@@ -46,17 +61,25 @@ def load_lua_script(script_path: str):
         content = f.read()
     try:
         lua.execute(content)
-        add_lua_func("fillRect", draw_rect)
-        add_lua_func("fillCirc", draw_circ)
+        add_lua_func("fillRect", fill_rect)
+        add_lua_func("fillRound", fill_circ)
+
+        add_lua_func("fillRect", fill_rect)
+        add_lua_func("fillRound", fill_circ)
+
         add_lua_func("keyDown", zcore.window.isKeyDown)
         add_lua_func("keyPressed", zcore.window.isKeyPressed)
-        add_lua_func("draw_sprite", draw_sprite)
+
+        add_lua_func("drawSprite", draw_sprite)
+        add_lua_func("drawText", draw_text)
+
         add_lua_value("KEY_ESC", zcore.keys.KEY_ESC)
+
     except LuaError as e:
         simplexml.panic("Lua script error:", e)
 
 
-def load_assets(file_list):
+def load_assets(file_list, projectXml):
     """Load asset files and return a dictionary of SpriteObjects."""
     assets = {}
     for file in file_list:
@@ -111,7 +134,7 @@ if __name__ == "__main__":
     load_lua_script(mainScript)
 
     files = projectXml.get("project", {}).get("files", [])
-    assets = load_assets(files)
+    assets = load_assets(files, projectXml)
 
     GameWindow = configure_game_window(projectXml.get("project", {}))
     handle_nonexistent_functions()

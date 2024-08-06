@@ -6,6 +6,7 @@
     <width>800</width>
     <height>600</height>
   </dimensions>
+
   <files>
     sprites/heart.png
     sprites/icon.png

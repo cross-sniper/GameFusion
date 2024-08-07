@@ -1,14 +1,20 @@
+#!/usr/bin/env python
+
 import os
 from typing import Callable, Union
 import simplexml
 import zcore
 from lupa import LuaRuntime, LuaError, lua_type
 import map_parser as mp
+import argparse
 
-assets: dict
-maps: dict
+# Global variables to store assets and maps
+assets: dict = {}
+maps: dict = {}
+GameWindow: zcore.window.pygame.Surface = None
 
 
+# Drawing functions
 def fill_rect(x: int, y: int, w: int, h: int, color: zcore.draw.ColorType):
     """Draw a rectangle on the game window."""
     zcore.draw.fillRect(GameWindow, x, y, w, h, color)
@@ -30,15 +36,18 @@ def draw_circ(x: int, y: int, r: int, color: zcore.draw.ColorType):
 
 
 def draw_sprite(name: str, x: int, y: int, scaleX: int, scaleY: int):
-    sprite: zcore.obj.SpriteObject = assets.get(os.path.join("sprites", name))
+    sprite: zcore.obj.SpriteObject = assets.get(name)
     if not sprite:
-        simplexml.panic("you dont have a sprite named", name)
+        simplexml.panic("You don't have a sprite named", name)
     sprite.draw(GameWindow, x, y, scaleX, scaleY)
 
 
-# def drawText(window: pygame.Surface,text: str, x: int, y: int, size: int, color: ColorType) -> None
 def draw_text(text: str, x: int, y: int, fontSize: int, color: zcore.draw.ColorType):
     zcore.draw.drawText(GameWindow, text, x, y, fontSize, color)
+
+
+def clear_screen(color: zcore.draw.ColorType = "black"):
+    zcore.draw.clearBackground(GameWindow, color)
 
 
 # Initialize Lua Runtime
@@ -55,6 +64,23 @@ def add_lua_value(name: str, value: Union[str, int, bool]):
     lua.globals()[name] = value
 
 
+def add_lua_func_to_table(tableName: str, name: str, function: Callable):
+    """Add a Python function to a Lua table."""
+    lua.globals()[tableName][name] = function
+
+
+def add_lua_value_to_table(tableName: str, name: str, value: Union[str, int, bool]):
+    """Add a Python value to a Lua table."""
+    lua.globals()[tableName][name] = value
+
+
+def push_keys_to_keyboard():
+    for key in dir(zcore.keys):
+        if key.startswith("KEY_"):
+            value = getattr(zcore.keys, key)
+            add_lua_value_to_table("keyboard", key[len("KEY_") :], value)
+
+
 def load_lua_script(script_path: str):
     """Load and execute a Lua script."""
     if not os.path.isfile(script_path):
@@ -63,32 +89,34 @@ def load_lua_script(script_path: str):
         content = f.read()
     try:
         lua.execute(content)
-        add_lua_func("fillRect", fill_rect)
-        add_lua_func("fillRound", fill_circ)
+        lua.execute("screen = {}")
+        lua.execute("keyboard = {}")
+        add_lua_func_to_table("screen", "fillRect", fill_rect)
+        add_lua_func_to_table("screen", "fillRound", fill_circ)
+        add_lua_func_to_table("screen", "drawRect", draw_rect)
+        add_lua_func_to_table("screen", "drawRound", draw_circ)
+        add_lua_func_to_table("screen", "drawSprite", draw_sprite)
+        add_lua_func_to_table("screen", "drawText", draw_text)
+        add_lua_func_to_table("screen", "clear", clear_screen)
 
-        add_lua_func("fillRect", fill_rect)
-        add_lua_func("fillRound", fill_circ)
-
-        add_lua_func("keyDown", zcore.window.isKeyDown)
-        add_lua_func("keyPressed", zcore.window.isKeyPressed)
-
-        add_lua_func("drawSprite", draw_sprite)
-        add_lua_func("drawText", draw_text)
-
-        add_lua_value("KEY_ESC", zcore.keys.KEY_ESC)
-
+        add_lua_func_to_table("keyboard", "keyDown", zcore.window.isKeyDown)
+        add_lua_func_to_table("keyboard", "keyPressed", zcore.window.isKeyPressed)
+        push_keys_to_keyboard()
     except LuaError as e:
         simplexml.panic("Lua script error:", e)
 
 
-def load_assets(file_list, projectXml):
+def load_assets(file_list: list[str]):
     """Load asset files and return a dictionary of SpriteObjects."""
-    assets = {}
+    global assets
     for file in file_list:
-        if not os.path.isfile(file):
-            simplexml.panic("File not found:", file)
+        filepath = os.path.join("sprites", file)
+        filename = os.path.splitext(file)[0]  # Get filename without extension
+
+        if not os.path.isfile(filepath):
+            simplexml.panic("File not found:", filepath)
         print(f"Loading: {file}")
-        assets[file] = zcore.obj.SpriteObject(file)
+        assets[filename] = zcore.obj.SpriteObject(filepath)
     return assets
 
 
@@ -114,7 +142,6 @@ def call_lua_function(func_name: str, *args):
 
 def main_process(dt: float) -> None:
     """Main game loop process."""
-    zcore.draw.clearBackground(GameWindow, "black")
     call_lua_function("update", dt)
     call_lua_function("draw")
 
@@ -128,18 +155,31 @@ def handle_nonexistent_functions():
             simplexml.panic(f"You need '{func_name}' to be a function.")
 
 
-if __name__ == "__main__":
-    projectXml = simplexml.loadFile("project.xml")
-    print(f"project data:\n{projectXml}")
+def main():
+    global GameWindow, assets
+
+    argsparser = argparse.ArgumentParser()
+    argsparser.add_argument("-pf", help="This is the project source file to run")
+
+    args = argsparser.parse_args()
+    if not args.pf:
+        argsparser.print_help()
+        exit(1)
+    projectXml = simplexml.loadFile(args.pf)
+    print(f"Project data:\n{projectXml}")
 
     mainScript = projectXml.get("project", {}).get("main", "scripts/main.lua")
     load_lua_script(mainScript)
 
-    files = projectXml.get("project", {}).get("files", [])
-    assets = load_assets(files, projectXml)
+    files = projectXml.get("project", {}).get("files", []).get("sprites", [])
+    assets = load_assets(files)
 
     GameWindow = configure_game_window(projectXml.get("project", {}))
     handle_nonexistent_functions()
     call_lua_function("setup")
 
     zcore.window.mainLoop(main_process)
+
+
+if __name__ == "__main__":
+    main()

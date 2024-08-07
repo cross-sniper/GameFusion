@@ -3,8 +3,10 @@ from typing import Callable, Union
 import simplexml
 import zcore
 from lupa import LuaRuntime, LuaError, lua_type
+import map_parser as mp
 
 assets: dict
+maps: dict
 
 
 def fill_rect(x: int, y: int, w: int, h: int, color: zcore.draw.ColorType):
@@ -28,7 +30,7 @@ def draw_circ(x: int, y: int, r: int, color: zcore.draw.ColorType):
 
 
 def draw_sprite(name: str, x: int, y: int, scaleX: int, scaleY: int):
-    sprite: zcore.obj.SpriteObject = assets.get(name)
+    sprite: zcore.obj.SpriteObject = assets.get(os.path.join("sprites", name))
     if not sprite:
         simplexml.panic("you dont have a sprite named", name)
     sprite.draw(GameWindow, x, y, scaleX, scaleY)

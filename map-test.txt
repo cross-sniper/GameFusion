@@ -1,0 +1,9 @@
+@rect
+    .pos vec2 20 20
+    .size vec2 40 40
+    .displayColor color red
+
+@circle
+    .pos vec 20 20
+    .rad int 30
+    .displayColor color red
